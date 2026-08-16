@@ -5,7 +5,7 @@ import "./globals.css";
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Logwise — Codex Runner Admin",
+  title: "Codex Runner Admin",
   description: "A focused operations dashboard for Codex CLI runner logs.",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
 };

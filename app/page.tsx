@@ -41,7 +41,7 @@ export default function Home() {
   return (
     <main className="shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brandMark">L</span><span>Logwise</span></div>
+        <div className="brand"><span className="brandMark">C</span><span>Codex Admin</span></div>
         <nav aria-label="Main navigation">
           <button className="navItem active"><span>◫</span> Overview</button>
           <button className="navItem"><span>↗</span> Live tail <em>Soon</em></button>
