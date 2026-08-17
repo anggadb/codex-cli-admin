@@ -24,6 +24,7 @@ export default function Home() {
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [syncMessage, setSyncMessage] = useState("Loaded from local cache");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const applyLogs = (data: Log[]) => {
     const sorted = [...data].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
@@ -36,6 +37,18 @@ export default function Home() {
       applyLogs(data); setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    setSidebarCollapsed(localStorage.getItem("sidebar-collapsed") === "true");
+  }, []);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem("sidebar-collapsed", String(next));
+      return next;
+    });
+  };
 
   const syncLogs = async () => {
     setSyncing(true);
@@ -100,9 +113,10 @@ export default function Home() {
   const totalCommands = logs.reduce((sum, log) => sum + log.commands.length, 0);
 
   return (
-    <main className="shell">
+    <main className={`shell ${sidebarCollapsed ? "sidebarCollapsed" : ""}`}>
       <aside className="sidebar">
-        <div className="brand"><span className="brandMark">C</span><span>Codex Admin</span></div>
+        <div className="brand"><span className="brandMark">C</span><span className="brandLabel">Codex Admin</span></div>
+        <button className="sidebarToggle" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>{sidebarCollapsed ? "›" : "‹"}</button>
         <nav aria-label="Main navigation">
           <button className="navItem active"><span>◫</span> Overview</button>
           <button className="navItem"><span>↗</span> Live tail <em>Soon</em></button>
