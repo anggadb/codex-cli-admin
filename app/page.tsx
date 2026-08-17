@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Command = { command: string; cwd: string; status: string; exitCode: number; durationMs: number };
+type Theme = "light" | "dark";
 type Log = {
   timestamp: string; task: string; approvalPolicy: string; success: boolean; project: string;
   taskId: string; threadId: string; turnId: string; status: string; durationMs: number;
@@ -25,6 +26,7 @@ export default function Home() {
   const [exporting, setExporting] = useState(false);
   const [syncMessage, setSyncMessage] = useState("Loaded from local cache");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState<Theme>("light");
 
   const applyLogs = (data: Log[]) => {
     const sorted = [...data].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
@@ -40,12 +42,27 @@ export default function Home() {
 
   useEffect(() => {
     setSidebarCollapsed(localStorage.getItem("sidebar-collapsed") === "true");
+    const savedTheme = localStorage.getItem("theme");
+    const nextTheme: Theme = savedTheme === "dark" || savedTheme === "light"
+      ? savedTheme
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
   }, []);
 
   const toggleSidebar = () => {
     setSidebarCollapsed((current) => {
       const next = !current;
       localStorage.setItem("sidebar-collapsed", String(next));
+      return next;
+    });
+  };
+
+  const toggleTheme = () => {
+    setTheme((current) => {
+      const next = current === "light" ? "dark" : "light";
+      localStorage.setItem("theme", next);
+      document.documentElement.dataset.theme = next;
       return next;
     });
   };
@@ -124,6 +141,7 @@ export default function Home() {
         </nav>
         <div className="sidebarBottom">
           <div className="sourceCard"><span className="pulse"/><div><b>Source connected</b><small>codex-cli-runner / logs</small></div></div>
+          <button className="navItem themeToggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`} title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}><span aria-hidden="true">{theme === "light" ? "☾" : "☀"}</span><span className="navLabel">{theme === "light" ? "Dark theme" : "Light theme"}</span></button>
           <button className="navItem"><span>⚙</span> Settings</button>
         </div>
       </aside>
