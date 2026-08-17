@@ -6,7 +6,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "sync:logs": "node scripts/sync-logs.mjs",
+    "sync:logs": "node --env-file-if-exists=.env.local scripts/sync-logs.mjs",
     "dev": "npm run sync:logs && vinext dev",
     "build": "npm run sync:logs && vinext build",
     "start": "vinext start",

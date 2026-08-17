@@ -19,20 +19,53 @@ export default function Home() {
   const [selected, setSelected] = useState<Log | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [sort, setSort] = useState("newest");
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("Loaded from local cache");
+
+  const applyLogs = (data: Log[]) => {
+    const sorted = [...data].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+    setLogs(sorted);
+    setSelected((current) => sorted.find((log) => log.taskId === current?.taskId) ?? sorted[0] ?? null);
+  };
 
   useEffect(() => {
     fetch("/logs.json").then((response) => response.json()).then((data: Log[]) => {
-      const sorted = [...data].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-      setLogs(sorted); setSelected(sorted[0] ?? null); setLoading(false);
+      applyLogs(data); setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
-  const filtered = useMemo(() => logs.filter((log) => {
-    const matchesText = `${log.task} ${log.project} ${log.taskId}`.toLowerCase().includes(query.toLowerCase());
-    const matchesStatus = status === "all" || (status === "success" ? log.success : !log.success);
-    return matchesText && matchesStatus;
-  }), [logs, query, status]);
+  const syncLogs = async () => {
+    setSyncing(true);
+    setSyncMessage("Syncing source logs…");
+    try {
+      const response = await fetch("/api/logs", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Sync failed");
+      applyLogs(result.logs);
+      const skipped = result.skipped.length ? ` · ${result.skipped.length} skipped` : "";
+      setSyncMessage(`Synced ${result.logs.length} logs just now${skipped}`);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Unable to sync logs");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const filtered = useMemo(() => {
+    const matches = logs.filter((log) => {
+      const matchesText = `${log.task} ${log.project} ${log.taskId}`.toLowerCase().includes(query.toLowerCase());
+      const matchesStatus = status === "all" || (status === "success" ? log.success : !log.success);
+      return matchesText && matchesStatus;
+    });
+
+    return matches.sort((a, b) => {
+      if (sort === "duration-desc") return b.durationMs - a.durationMs;
+      if (sort === "duration-asc") return a.durationMs - b.durationMs;
+      return +new Date(b.timestamp) - +new Date(a.timestamp);
+    });
+  }, [logs, query, status, sort]);
 
   const success = logs.filter((log) => log.success).length;
   const avg = logs.length ? logs.reduce((sum, log) => sum + log.durationMs, 0) / logs.length : 0;
@@ -56,7 +89,7 @@ export default function Home() {
       <section className="content">
         <header className="topbar">
           <div><p className="eyebrow">OPERATIONS / OVERVIEW</p><h1>Runner activity</h1></div>
-          <div className="headerActions"><span className="lastSync">● Synced just now</span><button className="iconButton" aria-label="Notifications">♢</button><div className="avatar">AB</div></div>
+          <div className="headerActions"><span className="lastSync" role="status">● {syncMessage}</span><button className="syncButton" onClick={syncLogs} disabled={syncing}><span className={syncing ? "spinning" : ""}>↻</span>{syncing ? "Syncing…" : "Sync logs"}</button><div className="avatar">AB</div></div>
         </header>
 
         <section className="metrics" aria-label="Log metrics">
@@ -69,7 +102,7 @@ export default function Home() {
         <section className="workspace">
           <div className="runsPanel">
             <div className="panelHeader"><div><h2>Recent runs</h2><p>Inspect task history and execution health.</p></div><button className="exportButton" onClick={() => navigator.clipboard?.writeText(JSON.stringify(filtered, null, 2))}>Copy JSON</button></div>
-            <div className="filters"><label className="search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search task, project, or ID…" aria-label="Search logs"/></label><select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status"><option value="all">All statuses</option><option value="success">Successful</option><option value="failed">Failed</option></select></div>
+            <div className="filters"><label className="search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search task, project, or ID…" aria-label="Search logs"/></label><select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status"><option value="all">All statuses</option><option value="success">Successful</option><option value="failed">Failed</option></select><select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort runs"><option value="newest">Newest first</option><option value="duration-desc">Duration: longest</option><option value="duration-asc">Duration: shortest</option></select></div>
             <div className="tableWrap">
               <table><thead><tr><th>STATUS</th><th>TASK</th><th>PROJECT</th><th>DURATION</th><th>STARTED</th><th></th></tr></thead>
                 <tbody>{filtered.map((log) => <tr key={log.taskId} className={selected?.taskId === log.taskId ? "selected" : ""} onClick={() => setSelected(log)}>

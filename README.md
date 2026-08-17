@@ -12,11 +12,13 @@ output, and errors.
 - Overview metrics for total runs, success rate, average duration, and commands
 - Search by task, project, or task ID
 - Filter successful and failed runs
+- Sort runs by longest or shortest duration
 - Detailed execution timing and approval information
 - Command and output inspection
 - Copy filtered records as JSON
 - Responsive desktop and mobile layouts
 - Automatic log synchronization before development and production builds
+- Manual in-dashboard synchronization from the source log directory
 
 ## Requirements
 
@@ -25,19 +27,17 @@ output, and errors.
 
 ## Log source
 
-By default, logs are read from:
-
-```text
-C:\Users\Angga Bachtiar\Documents\Personal Projects\codex-cli-runner\logs
-```
-
-To use another directory, set `CODEX_LOG_DIR` before running a sync, development
-server, or build:
+Copy the example environment file and set `CODEX_LOG_DIR` to the local runner
+logs directory:
 
 ```powershell
-$env:CODEX_LOG_DIR = "D:\path\to\logs"
+Copy-Item .env.example .env.local
+# Edit CODEX_LOG_DIR in .env.local, then start the dashboard.
 npm run dev
 ```
+
+`.env.local` is ignored by Git, so the machine-specific absolute path is never
+committed to the repository.
 
 Each `.json` file in the source directory is collected into `public/logs.json`.
 Malformed files are skipped with a warning.
@@ -60,6 +60,10 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm run build` | Sync logs and create a production build |
 | `npm run start` | Start the production server |
 | `npm run lint` | Run ESLint |
+
+The **Sync logs** button is available while running `npm run dev`. It reads the
+source directory through a local-only development endpoint and immediately
+refreshes the dashboard without restarting the server.
 
 ## Project structure
 

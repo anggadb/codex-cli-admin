@@ -1,8 +1,11 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const defaultSource = "C:\\Users\\Angga Bachtiar\\Documents\\Personal Projects\\codex-cli-runner\\logs";
-const source = process.env.CODEX_LOG_DIR || defaultSource;
+const source = process.env.CODEX_LOG_DIR;
+
+if (!source) {
+  throw new Error("CODEX_LOG_DIR is required. Add it to .env.local before syncing logs.");
+}
 const files = (await readdir(source)).filter((name) => name.endsWith(".json"));
 const logs = [];
 for (const file of files) {
