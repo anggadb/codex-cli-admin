@@ -22,6 +22,7 @@ export default function Home() {
   const [sort, setSort] = useState("newest");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [syncMessage, setSyncMessage] = useState("Loaded from local cache");
 
   const applyLogs = (data: Log[]) => {
@@ -50,6 +51,33 @@ export default function Home() {
       setSyncMessage(error instanceof Error ? error.message : "Unable to sync logs");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const exportExcel = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logs: filtered }),
+      });
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || "Excel export failed");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `codex-runner-logs-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setSyncMessage(`Exported ${filtered.length} logs to Excel`);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Unable to export logs");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -101,7 +129,7 @@ export default function Home() {
 
         <section className="workspace">
           <div className="runsPanel">
-            <div className="panelHeader"><div><h2>Recent runs</h2><p>Inspect task history and execution health.</p></div><button className="exportButton" onClick={() => navigator.clipboard?.writeText(JSON.stringify(filtered, null, 2))}>Copy JSON</button></div>
+            <div className="panelHeader"><div><h2>Recent runs</h2><p>Inspect task history and execution health.</p></div><button className="exportButton" onClick={exportExcel} disabled={exporting}>{exporting ? "Exporting…" : "Export Excel"}</button></div>
             <div className="filters"><label className="search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search task, project, or ID…" aria-label="Search logs"/></label><select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status"><option value="all">All statuses</option><option value="success">Successful</option><option value="failed">Failed</option></select><select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort runs"><option value="newest">Newest first</option><option value="duration-desc">Duration: longest</option><option value="duration-asc">Duration: shortest</option></select></div>
             <div className="tableWrap">
               <table><thead><tr><th>STATUS</th><th>TASK</th><th>PROJECT</th><th>DURATION</th><th>STARTED</th><th></th></tr></thead>

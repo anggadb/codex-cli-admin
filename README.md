@@ -15,7 +15,7 @@ output, and errors.
 - Sort runs by longest or shortest duration
 - Detailed execution timing and approval information
 - Command and output inspection
-- Copy filtered records as JSON
+- Export the current filtered and sorted records to a formatted Excel workbook
 - Responsive desktop and mobile layouts
 - Automatic log synchronization before development and production builds
 - Manual in-dashboard synchronization from the source log directory
@@ -46,6 +46,7 @@ Malformed files are skipped with a warning.
 
 ```bash
 npm install
+python -m pip install -r requirements.txt
 npm run dev
 ```
 
@@ -64,6 +65,10 @@ Open [http://localhost:3000](http://localhost:3000).
 The **Sync logs** button is available while running `npm run dev`. It reads the
 source directory through a local-only development endpoint and immediately
 refreshes the dashboard without restarting the server.
+
+The **Export Excel** button sends the current filtered rows to the local Python
+script at `scripts/export_logs.py` and downloads a formatted `.xlsx` workbook.
+Set `PYTHON_BIN` in `.env.local` to the local Python executable used for export.
 
 ## Project structure
 
