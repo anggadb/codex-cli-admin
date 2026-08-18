@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 type Command = { command: string; cwd: string; status: string; exitCode: number; durationMs: number };
 type Theme = "light" | "dark";
@@ -14,6 +14,32 @@ type Log = {
 const formatDuration = (ms: number) => ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(1)}s`;
 const formatTime = (value: string) => new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(value));
 const formatDate = (value: string) => new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+const parseDateTime = (value: string) => {
+  const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const [, month, day, year, hour, minute] = match.map(Number);
+  const parsed = new Date(year, month - 1, day, hour, minute);
+  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day && parsed.getHours() === hour && parsed.getMinutes() === minute
+    ? parsed.getTime()
+    : null;
+};
+const formatDateTimeInput = (value: string) => {
+  const raw = value.replace(/\D/g, "").slice(0, 12);
+  const bound = (segment: string, minimum: number, maximum: number) => segment.length === 2
+    ? String(Math.min(maximum, Math.max(minimum, Number(segment)))).padStart(2, "0")
+    : segment;
+  const month = bound(raw.slice(0, 2), 1, 12);
+  const day = bound(raw.slice(2, 4), 1, 31);
+  const year = raw.slice(4, 8);
+  const hour = bound(raw.slice(8, 10), 0, 23);
+  const minute = bound(raw.slice(10, 12), 0, 59);
+  const digits = `${month}${day}${year}${hour}${minute}`;
+  if (digits.length <= 2) return digits.length === 2 ? `${digits}/` : digits;
+  if (digits.length <= 4) return digits.length === 4 ? `${digits.slice(0, 2)}/${digits.slice(2)}/` : `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  if (digits.length <= 8) return digits.length === 8 ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)} ` : `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  if (digits.length <= 10) return digits.length === 10 ? `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)} ${digits.slice(8)}:` : `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)} ${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)} ${digits.slice(8, 10)}:${digits.slice(10)}`;
+};
 
 export default function Home() {
   const [logs, setLogs] = useState<Log[]>([]);
@@ -21,12 +47,24 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [sort, setSort] = useState("newest");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [syncMessage, setSyncMessage] = useState("Loaded from local cache");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<Theme>("light");
+  const datePickerRef = useRef<HTMLDivElement>(null);
+
+  const handleTimestampBackspace = (event: KeyboardEvent<HTMLInputElement>, value: string, update: (next: string) => void) => {
+    const atEnd = event.currentTarget.selectionStart === value.length && event.currentTarget.selectionEnd === value.length;
+    if (event.key === "Backspace" && atEnd && /[\/: ]$/.test(value)) {
+      event.preventDefault();
+      update(formatDateTimeInput(value.slice(0, -2)));
+    }
+  };
 
   const applyLogs = (data: Log[]) => {
     const sorted = [...data].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
@@ -39,6 +77,22 @@ export default function Home() {
       applyLogs(data); setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!datePickerOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!datePickerRef.current?.contains(event.target as Node)) setDatePickerOpen(false);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDatePickerOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [datePickerOpen]);
 
   useEffect(() => {
     setSidebarCollapsed(localStorage.getItem("sidebar-collapsed") === "true");
@@ -115,7 +169,13 @@ export default function Home() {
     const matches = logs.filter((log) => {
       const matchesText = `${log.task} ${log.project} ${log.taskId}`.toLowerCase().includes(query.toLowerCase());
       const matchesStatus = status === "all" || (status === "success" ? log.success : !log.success);
-      return matchesText && matchesStatus;
+      const timestamp = new Date(log.timestamp).getTime();
+      const parsedFrom = parseDateTime(dateFrom);
+      const parsedTo = parseDateTime(dateTo);
+      const from = parsedFrom ?? Number.NEGATIVE_INFINITY;
+      const to = parsedTo !== null ? parsedTo + 59999 : Number.POSITIVE_INFINITY;
+      const matchesDate = timestamp >= from && timestamp <= to;
+      return matchesText && matchesStatus && matchesDate;
     });
 
     return matches.sort((a, b) => {
@@ -123,7 +183,7 @@ export default function Home() {
       if (sort === "duration-asc") return a.durationMs - b.durationMs;
       return +new Date(b.timestamp) - +new Date(a.timestamp);
     });
-  }, [logs, query, status, sort]);
+  }, [logs, query, status, sort, dateFrom, dateTo]);
 
   const success = logs.filter((log) => log.success).length;
   const avg = logs.length ? logs.reduce((sum, log) => sum + log.durationMs, 0) / logs.length : 0;
@@ -162,7 +222,23 @@ export default function Home() {
         <section className="workspace">
           <div className="runsPanel">
             <div className="panelHeader"><div><h2>Recent runs</h2><p>Inspect task history and execution health.</p></div><button className="exportButton" onClick={exportExcel} disabled={exporting}>{exporting ? "Exporting…" : "Export Excel"}</button></div>
-            <div className="filters"><label className="search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search task, project, or ID…" aria-label="Search logs"/></label><select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status"><option value="all">All statuses</option><option value="success">Successful</option><option value="failed">Failed</option></select><select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort runs"><option value="newest">Newest first</option><option value="duration-desc">Duration: longest</option><option value="duration-asc">Duration: shortest</option></select></div>
+            <div className="filters">
+              <label className="search"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search task, project, or ID…" aria-label="Search logs"/></label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status"><option value="all">All statuses</option><option value="success">Successful</option><option value="failed">Failed</option></select>
+              <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort runs"><option value="newest">Newest first</option><option value="duration-desc">Duration: longest</option><option value="duration-asc">Duration: shortest</option></select>
+              <div ref={datePickerRef} className={`datePicker ${dateFrom || dateTo ? "active" : ""} ${datePickerOpen ? "open" : ""}`}>
+                <button type="button" className="datePickerButton" onClick={() => setDatePickerOpen((open) => !open)} aria-label="Filter by timestamp" title="Filter by timestamp" aria-expanded={datePickerOpen} aria-haspopup="dialog">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg>
+                  {(dateFrom || dateTo) && <i/>}
+                </button>
+                {datePickerOpen && <div className="datePopover" role="dialog" aria-label="Filter by log timestamp">
+                  <div className="datePopoverHeader"><b>Date range</b><span>Filter by log timestamp</span></div>
+                  <label><span>From</span><input type="text" inputMode="numeric" maxLength={16} value={dateFrom} onChange={(e) => setDateFrom(formatDateTimeInput(e.target.value))} onKeyDown={(e) => handleTimestampBackspace(e, dateFrom, setDateFrom)} placeholder="MM/DD/YYYY HH:mm" aria-label="Logs from timestamp" aria-invalid={dateFrom !== "" && parseDateTime(dateFrom) === null}/></label>
+                  <label><span>To</span><input type="text" inputMode="numeric" maxLength={16} value={dateTo} onChange={(e) => setDateTo(formatDateTimeInput(e.target.value))} onKeyDown={(e) => handleTimestampBackspace(e, dateTo, setDateTo)} placeholder="MM/DD/YYYY HH:mm" aria-label="Logs to timestamp" aria-invalid={dateTo !== "" && parseDateTime(dateTo) === null}/></label>
+                  {(dateFrom || dateTo) && <button type="button" className="clearDates" onClick={() => { setDateFrom(""); setDateTo(""); }} aria-label="Clear date range">Clear range</button>}
+                </div>}
+              </div>
+            </div>
             <div className="tableWrap">
               <table><thead><tr><th>STATUS</th><th>TASK</th><th>PROJECT</th><th>DURATION</th><th>STARTED</th><th></th></tr></thead>
                 <tbody>{filtered.map((log) => <tr key={log.taskId} className={selected?.taskId === log.taskId ? "selected" : ""} onClick={() => setSelected(log)}>
